@@ -1,0 +1,24 @@
+# Build output
+target/
+dist/
+node_modules/
+.angular/
+*.class
+*.jar
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+*.iml
+.vscode/settings.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+build-log.txt

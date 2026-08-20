@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  core-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21', cache: maven }
+      - name: Build and test (Testcontainers spins up real Postgres + Redis)
+        working-directory: core-api
+        run: mvn -B verify
+      - name: Publish JaCoCo coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: core-api/target/site/jacoco/
+
+  reserve-gateway:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.22' }
+      - name: Vet
+        working-directory: reserve-gateway
+        run: go vet ./...
+      - name: Test (real Redis service container above)
+        working-directory: reserve-gateway
+        env:
+          REDIS_URL: redis://localhost:6379
+        run: go test ./... -v
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: 'npm', cache-dependency-path: web/package-lock.json }
+      - working-directory: web
+        run: npm ci
+      - working-directory: web
+        run: npx ng lint || true   # non-blocking until the ruleset is tuned
+      - working-directory: web
+        run: npx ng test --watch=false --browsers=ChromeHeadless
+      - working-directory: web
+        run: npx ng build --configuration production
+
+  docker-build-and-scan:
+    needs: [core-api, reserve-gateway, web]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build core-api image
+        run: docker build -t surgecart/core-api:${{ github.sha }} ./core-api
+      - name: Build reserve-gateway image
+        run: docker build -t surgecart/reserve-gateway:${{ github.sha }} ./reserve-gateway
+      - name: Scan core-api image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: surgecart/core-api:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+      - name: Scan reserve-gateway image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: surgecart/reserve-gateway:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+
+  deploy:
+    needs: [docker-build-and-scan]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Railway deploy
+        run: |
+          curl -X POST "https://backboard.railway.app/graphql/v2" \
+            -H "Authorization: Bearer ${{ secrets.RAILWAY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"query":"mutation { serviceInstanceRedeploy(serviceId: \"${{ secrets.RAILWAY_SERVICE_ID }}\") }"}'
+      # Vercel redeploys the frontend automatically on push via its own
+      # GitHub integration — no step needed here.

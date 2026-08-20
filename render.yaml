@@ -1,0 +1,64 @@
+# Render Blueprint — provisions the whole backend in one click.
+# In Render: New > Blueprint > point at this repo. It reads this file and
+# creates the database, Redis instance, and both services with the right
+# environment wiring already connected.
+
+databases:
+  - name: surgecart-db
+    databaseName: surgecart
+    user: surgecart
+    plan: free
+
+services:
+  - type: redis
+    name: surgecart-redis
+    plan: free
+    ipAllowList: []          # only reachable from inside Render's network
+    maxmemoryPolicy: noeviction   # stock counters must never be evicted
+
+  - type: web
+    name: surgecart-api
+    runtime: docker
+    dockerfilePath: ./core-api/Dockerfile
+    dockerContext: ./core-api
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: DB_URL
+        fromDatabase:
+          name: surgecart-db
+          property: connectionString
+      - key: DB_USER
+        fromDatabase:
+          name: surgecart-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: surgecart-db
+          property: password
+      - key: REDIS_URL
+        fromService:
+          name: surgecart-redis
+          type: redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true     # Render generates a strong secret automatically
+      - key: CORS_ORIGIN
+        sync: false             # set this to your Vercel URL after the first deploy
+      - key: SURGECART_RATE_LIMIT_AUTH_PER_15MIN
+        value: "50"
+
+  - type: web
+    name: surgecart-gateway
+    runtime: docker
+    dockerfilePath: ./reserve-gateway/Dockerfile
+    dockerContext: ./reserve-gateway
+    plan: free
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          name: surgecart-redis
+          type: redis
+          property: connectionString
+      - key: RESERVATION_TTL_SECONDS
+        value: "90"
