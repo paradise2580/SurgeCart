@@ -5,8 +5,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 /**
@@ -16,10 +14,14 @@ import org.testcontainers.utility.DockerImageName;
  * actual isolation behaviour faithfully. A pessimistic-locking test built
  * on H2 would be validating the wrong database and could pass for the
  * wrong reasons.
+ *
+ * The containers are started once and shared by every test class (the
+ * singleton-container pattern). Spring caches the application context across
+ * classes, so per-class containers would leave the second class talking to a
+ * stopped database. Testcontainers' Ryuk sidecar removes them at JVM exit.
  */
-@Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@SuppressWarnings("resource") // @Testcontainers manages the container lifecycle
+@SuppressWarnings("resource") // Ryuk removes the containers at JVM exit
 public abstract class AbstractIntegrationTest {
 
     /**
@@ -33,8 +35,7 @@ public abstract class AbstractIntegrationTest {
      */
     public static final int TEST_POOL_SIZE = 64;
 
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
+    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("surgecart_test")
             .withUsername("test")
             .withPassword("test")
@@ -43,8 +44,12 @@ public abstract class AbstractIntegrationTest {
             // Leave headroom above TEST_POOL_SIZE so the cause is never ambiguous.
             .withCommand("postgres", "-c", "max_connections=200");
 
-    @Container
-    static RedisContainer redis = new RedisContainer(DockerImageName.parse("redis:7-alpine"));
+    static final RedisContainer redis = new RedisContainer(DockerImageName.parse("redis:7-alpine"));
+
+    static {
+        postgres.start();
+        redis.start();
+    }
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {

@@ -143,8 +143,7 @@ BenchmarkReserveConcurrent   20000   44606 ns/op
 
 ### 4.2 Java core-api — the four strategies compared
 
-Based on the mechanism differences above, running the same
-`ReservationConcurrencyTest` should show:
+Based on the mechanism differences above, the expected shape is:
 
 - **Naive:** granted count meaningfully above 100 (the whole point — it's
   the broken baseline, captured to document the bug, not to pass)
@@ -156,14 +155,15 @@ Based on the mechanism differences above, running the same
   gateway's measured numbers above, since both hit the identical Lua
   script against the same Redis
 
-The table below is filled in from the Admin panel's benchmark (see the README).
+Measured with the Admin panel's benchmark (100 units, 5,000 concurrent
+claims, full Docker Compose stack on a Windows laptop):
 
-| Strategy | Granted / 100 | p95 latency | Throughput (req/s) | Oversold |
+| Strategy | Granted / 100 | Duration | Throughput (req/s) | Oversold |
 |---|---|---|---|---|
-| naive-read-modify-write | *(run it)* | — | — | *(expected: yes)* |
-| jpa-optimistic-locking | *(run it)* | *(run it)* | *(run it)* | no |
-| jpa-pessimistic-locking | *(run it)* | *(run it)* | *(run it)* | no |
-| redis-atomic-lua | *(run it)* | *(run it)* | *(run it)* | no |
+| naive-read-modify-write | **1,184** | 6.1 s | 821 | **yes** |
+| jpa-optimistic-locking | 100 | 3.2 s | 1,557 | no |
+| jpa-pessimistic-locking | 100 | 5.9 s | 854 | no |
+| redis-atomic-lua | 100 | 1.2 s | **4,143** | no |
 
 The `BenchmarkController`/`AdminDashboardComponent` UI in this repo exists
 specifically to make regenerating this table a one-click action once the

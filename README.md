@@ -18,11 +18,14 @@ The hard part isn't the shop. It's making sure the store never sells more items 
 - 👤 **Accounts and roles.** JWT login, buyer and admin roles.
 - 📊 **Built-in benchmark.** An admin panel runs four locking strategies side by side and shows which ones oversell.
 
-**Measured result** (Go gateway, 5,000 concurrent requests against 100 units of stock):
+**Measured result:** 5,000 buyers at once, 100 units in stock.
 
-```
-requests=5000  granted=100  rejected=4900  oversold=0
-```
+| Approach | Items sold | Oversold? | Speed |
+|---|---|---|---|
+| Naive (no locking) | 1,184 ❌ | Yes | 821 req/s |
+| Database optimistic locking | 100 ✅ | No | 1,557 req/s |
+| Database row lock | 100 ✅ | No | 854 req/s |
+| **Redis + Lua (what SurgeCart uses)** | **100 ✅** | **No** | **4,143 req/s** |
 
 ---
 
@@ -184,6 +187,7 @@ Database tables and demo sale data are created automatically on first start.
 | `Docker doesn't appear to be running` | Open Docker Desktop and wait until it says "Running". |
 | Port already in use (4200 / 8080 / 5432 / 6379) | Stop the other app using that port, or run `docker compose down`. |
 | Admin tab not showing after `make-admin` | Log out and log back in. |
+| API won't start: `Migration checksum mismatch` | Your local database is from an older version. Reset it with the fresh-start command below. |
 | Something looks broken | Run `.\start.ps1 -Fresh` (Windows) or `./start.sh --fresh` (Mac/Linux) to reset everything. |
 
 ---

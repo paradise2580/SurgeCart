@@ -17,7 +17,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.stream.StreamMessageListenerContainer;
 import org.springframework.data.redis.stream.Subscription;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -52,6 +52,7 @@ public class OrderQueueConsumer {
     private final OrderRepository orderRepository;
     private final ReservationRepository reservationRepository;
     private final SaleEventRepository saleEventRepository;
+    private final TransactionTemplate transactionTemplate;
 
     /** Typed accessor: opsForStream() is generic in HK/HV, so binding it to an
      *  explicitly typed local lets Java infer <String, String> rather than
@@ -69,17 +70,25 @@ public class OrderQueueConsumer {
 
         StreamMessageListenerContainer.StreamMessageListenerContainerOptions<String, MapRecord<String, String, String>> options =
                 StreamMessageListenerContainer.StreamMessageListenerContainerOptions.builder()
-                        .pollTimeout(Duration.ofSeconds(2))
+                        // Must stay below spring.data.redis.timeout (2s): each poll is a
+                        // blocking XREADGROUP, and one that outlives the client timeout
+                        // fails as a command timeout on every idle poll.
+                        .pollTimeout(Duration.ofSeconds(1))
                         .build();
 
         container = StreamMessageListenerContainer.create(
                 redisTemplate.getConnectionFactory(), options);
 
-        subscription = container.receive(
-                Consumer.from(GROUP, CONSUMER),
-                StreamOffset.create(OrderQueueProducer.STREAM_KEY, ReadOffset.lastConsumed()),
-                this::handle
-        );
+        // The default cancels the subscription on the first error, so a single
+        // Redis hiccup would stop order processing until the next restart.
+        var request = StreamMessageListenerContainer.StreamReadRequest
+                .builder(StreamOffset.create(OrderQueueProducer.STREAM_KEY, ReadOffset.lastConsumed()))
+                .consumer(Consumer.from(GROUP, CONSUMER))
+                .autoAcknowledge(false)
+                .cancelOnError(e -> false)
+                .errorHandler(e -> log.warn("Order stream read failed, retrying: {}", e.getMessage()))
+                .build();
+        subscription = container.register(request, this::handle);
 
         container.start();
         log.info("Order queue consumer started (group={}, consumer={})", GROUP, CONSUMER);
@@ -117,7 +126,9 @@ public class OrderQueueConsumer {
         int attempt = 0;
         while (true) {
             try {
-                processOrder(fields);
+                // Run through the TransactionTemplate: this is a self-call, so a
+                // @Transactional annotation on processOrder would never apply.
+                transactionTemplate.executeWithoutResult(status -> processOrder(fields));
                 return;
             } catch (DataIntegrityViolationException duplicate) {
                 log.info("Reservation {} already has an order — redelivered message, treating as success", reservationToken);
@@ -130,8 +141,7 @@ public class OrderQueueConsumer {
         }
     }
 
-    @Transactional
-    void processOrder(Map<String, String> fields) {
+    private void processOrder(Map<String, String> fields) {
         Long saleId = Long.valueOf(fields.get("saleId"));
         Long userId = Long.valueOf(fields.get("userId"));
         String reservationToken = fields.get("reservationToken");
