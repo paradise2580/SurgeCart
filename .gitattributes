@@ -1,0 +1,7 @@
+# Keep LF everywhere so shell scripts and Dockerfiles work on Linux/macOS
+# even when the repo is cloned on Windows.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.ico binary
+*.png binary
+*.jpg binary

@@ -1,229 +1,200 @@
-# SurgeCart
+# SurgeCart — Flash Sale Engine
 
-High-concurrency flash-sale and inventory-reservation engine. Sells exactly
-N units when thousands of buyers click "Buy" in the same second — never N+1.
+> Sells **exactly 100** units when **5,000 people** click "Buy" in the same second. Never 101.
 
-**Stack:** Java 21 / Spring Boot 3.3 · PostgreSQL 16 · Redis 7 · Angular 18 · Go 1.22 · Docker
+[![CI](https://github.com/paradise2580/surgecart-flash-sale-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/paradise2580/surgecart-flash-sale-engine/actions/workflows/ci.yml)
 
-Full architecture writeup, including the three benchmarked concurrency
-strategies and measured evidence: [`DESIGN.md`](./DESIGN.md)
+SurgeCart is a full-stack e-commerce system built for **flash sales**: limited stock, a huge crowd, and one second of chaos.
+The hard part isn't the shop. It's making sure the store never sells more items than it has when thousands of requests arrive at once.
 
 ---
 
-## Quick start
+## ✨ What it does
 
-Only prerequisite: **Docker Desktop running.** Nothing else needs installing —
-no Java, no Node, no Maven, no Postgres.
+- 🛒 **Live flash sales.** Users see stock count down in real time (WebSockets).
+- ⏱️ **Reserve, then pay.** Clicking "Buy now" holds an item for 90 seconds. If the user doesn't pay, it goes back on sale automatically.
+- 🔒 **No overselling.** Stock is claimed through an atomic Redis Lua script, so even 5,000 simultaneous buyers can't oversell.
+- 🔁 **No double charges.** Idempotency keys make retried or double-clicked requests harmless.
+- 👤 **Accounts and roles.** JWT login, buyer and admin roles.
+- 📊 **Built-in benchmark.** An admin panel runs four locking strategies side by side and shows which ones oversell.
+
+**Measured result** (Go gateway, 5,000 concurrent requests against 100 units of stock):
+
+```
+requests=5000  granted=100  rejected=4900  oversold=0
+```
+
+---
+
+## 🧰 Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Frontend** | Angular 18, TypeScript, Tailwind CSS |
+| **Backend API** | Java 21, Spring Boot 3.3, Spring Security (JWT), Spring Data JPA |
+| **High-speed gateway** | Go 1.22 |
+| **Database** | PostgreSQL 16 (Flyway migrations) |
+| **Cache / stock counter** | Redis 7 (atomic Lua scripts) |
+| **Real-time updates** | WebSockets (STOMP) |
+| **Testing** | JUnit 5, Testcontainers, Go test, Karma/Jasmine, k6 load testing |
+| **DevOps** | Docker, Docker Compose, GitHub Actions CI, Trivy image scanning |
+
+---
+
+## 📁 Project Structure
+
+```
+surgecart-flash-sale-engine/
+├── frontend/                  # Angular web app (what users see)
+├── backend/
+│   ├── core-api/              # Main Spring Boot API (Java)
+│   ├── reserve-gateway/       # Ultra-fast reservation service (Go)
+│   └── loadtest/              # k6 load test script
+├── docs/
+│   ├── DESIGN.md              # Architecture and engineering decisions
+│   └── DEPLOYMENT.md          # How to deploy to the cloud
+├── scripts/                   # Helper scripts (e.g. make a user admin)
+├── docker-compose.yml         # Runs the whole system with one command
+├── start.ps1 / start.sh       # One-click start scripts
+└── README.md
+```
+
+---
+
+## 🚀 Run It Locally
+
+You only need **[Docker Desktop](https://www.docker.com/products/docker-desktop/)**.
+You don't need to install Java, Node, Go, PostgreSQL or Redis; Docker handles all of it.
+
+### Step 1: Download the project
+
+```bash
+git clone https://github.com/paradise2580/surgecart-flash-sale-engine.git
+cd surgecart-flash-sale-engine
+```
+
+### Step 2: Start everything
+
+Make sure Docker Desktop is open and running, then:
 
 **Windows (PowerShell):**
 ```powershell
 .\start.ps1
 ```
 
-**macOS / Linux:**
+**Mac / Linux:**
 ```bash
+chmod +x start.sh scripts/*.sh
 ./start.sh
 ```
 
-First run takes a few minutes (it compiles the Java service and the Angular
-app inside containers). The script waits until the API actually reports
-healthy before telling you it's ready.
+> ⏳ The first start takes about 3–5 minutes while Docker builds everything. Later starts take seconds.
 
-| | |
+### Step 3: Open the app
+
+| What | Link |
 |---|---|
-| App | http://localhost:4200 |
-| Swagger UI | http://localhost:8080/swagger-ui.html |
-| Go gateway | http://localhost:8081/health |
+| 🌐 **Web app** | http://localhost:4200 |
+| 📖 API docs (Swagger) | http://localhost:8080/swagger-ui.html |
+| ⚡ Go gateway health | http://localhost:8081/health |
 
-### Then
+### Step 4: Try it out
 
-1. Register an account at http://localhost:4200/register (any email, 8+ char password)
-2. Buy the live sale — reserve, watch the 90s countdown, pay, see it in Orders
-3. Unlock the admin + benchmark panel:
+1. Go to http://localhost:4200/register and create an account (any email, password of 8+ characters).
+2. Open the live sale and click **Buy now**. The item is held for you and a 90-second countdown starts.
+3. Click **Pay now** (payments are simulated, so no card is needed). Your order appears under **Orders**.
+
+### Optional: unlock the Admin panel
 
 ```powershell
-.\make-admin.ps1 your@email.com      # Windows
-./make-admin.sh your@email.com        # macOS / Linux
+.\scripts\make-admin.ps1 your@email.com      # Windows
+./scripts/make-admin.sh your@email.com       # Mac / Linux
 ```
 
-Log out and back in (the role is carried inside the JWT), and **Admin**
-appears in the nav.
+Log out and log back in, and an **Admin** tab appears. From there you can activate sales and run the concurrency benchmark (sale ID `1`, stock `100`, concurrency `5000`):
+- Strategy **`naive`** grants **more than 100** (it oversells, which shows the bug).
+- Strategy **`redis`** grants **exactly 100** (correct and fast).
 
-### Reproducing the benchmark
+### Stop the app
 
-In the Admin panel: activate sale `1`, then run the benchmark twice with
-stock `100` and concurrency `5000` —
-
-- strategy `naive` → grants **more than 100**, row flagged red, oversold
-- strategy `redis` → grants **exactly 100**, never oversold
-
-That side-by-side is the core demonstration of the whole project. Record the
-numbers into `DESIGN.md` section 4.2.
-
-### Other commands
-
-```powershell
-.\start.ps1 -Fresh          # wipe all data and start clean
-docker compose down          # stop everything
-docker compose logs core-api # tail the API logs
+```bash
+docker compose down        # stop (keeps your data)
+docker compose down -v     # stop and delete all data
 ```
 
 ---
 
-## Status of this repository
+## 🧪 Running the Tests
 
-Every line of source here is real, hand-written code, not scaffolding
-filler. What's been **actually run and verified**, and what hasn't, is
-stated plainly rather than implied:
+<details>
+<summary>Click to expand</summary>
 
-| Component | Verified how |
-|---|---|
-| Go gateway | Built, vetted, unit-tested, and load-tested against a real local Redis — see `DESIGN.md` section 4.1 for captured output |
-| Angular client | `npm install` and `ng build --configuration production` both succeed cleanly |
-| Spring Boot core-api | Written and reviewed, **not compiled in this sandbox** — Maven Central was unreachable from the build environment this project was assembled in. Run `mvn verify` yourself before trusting any Java-side number |
-| Docker images | Dockerfiles written for all three services; not built here (no Docker daemon in the assembly sandbox) |
-| Deployment (Vercel/Railway/Neon/Upstash) | Configured and documented below, not actually deployed — that requires your own accounts and credentials |
-
-None of that is a reason not to trust the code — it's exactly what you
-should independently verify before this goes on a resume, and the commands
-below tell you how.
-
-## Local development
-
-### Prerequisites
-Java 21, Maven, Go 1.22+, Node 22+, PostgreSQL 16, Redis 7 — or just Docker.
-
-### Option A — Docker Compose (everything at once)
 ```bash
-docker compose up --build
-# core-api      -> http://localhost:8080  (Swagger UI at /swagger-ui.html)
-# reserve-gateway -> http://localhost:8081
-# web           -> http://localhost:4200
-```
+# Backend (Java) needs Docker running; spins up real PostgreSQL + Redis
+cd backend/core-api
+mvn verify
 
-### Option B — run each service natively
+# Gateway (Go) needs Redis on localhost:6379
+cd backend/reserve-gateway
+go test ./... -v
 
-**Database + Redis:**
-```bash
-# Postgres 16 and Redis 7 running locally, then:
-createdb surgecart
-redis-server --notify-keyspace-events Ex &
-```
-
-**core-api:**
-```bash
-cd core-api
-cp ../.env.example .env   # edit as needed
-mvn spring-boot:run
-```
-Flyway runs migrations automatically on startup, including seed data —
-a demo admin (`admin@surgecart.dev`) and buyer (`buyer@surgecart.dev`),
-both password `Password123!`, and one sale event already `LIVE` with 100
-units of stock.
-
-**reserve-gateway:**
-```bash
-cd reserve-gateway
-go run ./cmd/gateway
-```
-
-**web:**
-```bash
-cd web
+# Frontend (Angular)
+cd frontend
 npm install
-npm start   # http://localhost:4200
+npm test
 ```
 
-### Running the tests
+The key test is `ReservationConcurrencyTest`. It fires 5,000 concurrent purchases at 100 units of stock and checks that exactly 100 are sold.
+
+</details>
+
+<details>
+<summary>Run without Docker (for developers)</summary>
+
+Requirements: Java 21, Maven, Node 22, Go 1.22, PostgreSQL 16, Redis 7.
 
 ```bash
-# Java — spins up real Postgres + Redis via Testcontainers
-cd core-api && mvn verify
+# 1. Start PostgreSQL (create a database called "surgecart", user/password: postgres)
+#    and Redis on their default ports.
 
-# Go — needs a reachable Redis (defaults to localhost:6379)
-cd reserve-gateway && go test ./... -v
+# 2. Backend API: http://localhost:8080
+cd backend/core-api
+mvn spring-boot:run
 
-# Go benchmark (raw Lua throughput, bypasses HTTP)
-cd reserve-gateway && go test ./internal/store/... -bench=. -run=^$ -benchtime=20000x
+# 3. Go gateway: http://localhost:8081
+cd backend/reserve-gateway
+go run ./cmd/gateway
 
-# Angular
-cd web && npm test
+# 4. Frontend: http://localhost:4200
+cd frontend
+npm install
+npm start
 ```
 
-### Reproducing the benchmark table
+Database tables and demo sale data are created automatically on first start.
 
-1. Start core-api and log in as `admin@surgecart.dev`.
-2. Open `/admin` in the Angular app (or call `POST /api/admin/benchmark/{saleId}`
-   directly — see Swagger UI).
-3. Run each strategy (`naive`, `optimistic`, `pessimistic`, `redis`) against
-   the same stock count and concurrency, and record the results into
-   `DESIGN.md` section 4.2.
+</details>
 
-For the Go side, the same comparison already has real numbers captured —
-see `DESIGN.md` section 4.1 — reproducible with:
-```bash
-cd reserve-gateway
-go test ./internal/store/... -run TestReserve_5000ConcurrentClaimsAgainst100Units_NeverOversells -v
-```
+---
 
-## Deployment
+## 🛠️ Troubleshooting
 
-This project targets Vercel (frontend) + Railway (both backends) + Neon
-(Postgres) + Upstash (Redis) — no AWS. **None of this has been deployed
-on your behalf** — it needs your own accounts. Steps:
+| Problem | Fix |
+|---|---|
+| `Docker doesn't appear to be running` | Open Docker Desktop and wait until it says "Running". |
+| Port already in use (4200 / 8080 / 5432 / 6379) | Stop the other app using that port, or run `docker compose down`. |
+| Admin tab not showing after `make-admin` | Log out and log back in. |
+| Something looks broken | Run `.\start.ps1 -Fresh` (Windows) or `./start.sh --fresh` (Mac/Linux) to reset everything. |
 
-### 1. Neon (PostgreSQL)
-Create a project, copy the pooled connection string. Flyway will run
-migrations automatically on core-api's first boot against it.
+---
 
-### 2. Upstash (Redis)
-Create a Redis database, copy the `rediss://` connection URL. Note:
-Upstash's free tier may restrict `CONFIG SET`, which the keyspace-
-notification fast path (DESIGN.md section 7) uses — if so, it logs a
-warning and falls back to the 5-second sweep, which is still correct,
-just slightly slower to reclaim expired stock.
+## 📚 Learn More
 
-### 3. Railway — core-api
-New project → Deploy from `core-api/Dockerfile`. Set environment
-variables: `DB_URL`, `DB_USER`, `DB_PASSWORD` (from Neon), `REDIS_URL`
-(from Upstash), `JWT_SECRET` (generate a real 256-bit secret — don't use
-the dev default), `CORS_ORIGIN` (your Vercel URL, set after step 5).
-Health check path: `/actuator/health`.
+- **[Design document](docs/DESIGN.md)**: the architecture, why Redis + Lua beats database locking, and measured results.
+- **[Deployment guide](docs/DEPLOYMENT.md)**: deploy to Render (backend) and Vercel (frontend).
 
-### 4. Railway — reserve-gateway
-Second service in the same project, `reserve-gateway/Dockerfile`. Same
-`REDIS_URL`.
+---
 
-### 5. Vercel — web
-Import the repo, root directory `web`, framework preset "Angular", build
-command `npx ng build --configuration production`, output directory
-`dist/web/browser`. Add a build step or Vercel project setting that
-writes `public/env-config.js` with your real Railway URLs before build
-(see the placeholder file already in `web/public/env-config.js`).
+## 👤 Author
 
-### 6. Close the loop
-Update core-api's `CORS_ORIGIN` to your real Vercel URL and redeploy.
-
-### GitHub Actions
-`.github/workflows/ci.yml` builds and tests all three services on every
-PR, then builds + Trivy-scans Docker images and triggers a Railway
-redeploy on merge to `main` (`RAILWAY_TOKEN` / `RAILWAY_SERVICE_ID`
-repo secrets required). Vercel redeploys automatically via its own GitHub
-integration.
-
-## Accounts
-
-There are no seeded user accounts — password hashes have to come from the
-app's own encoder to be valid. Register through the UI at `/register`, then
-promote yourself if you need the admin panel:
-
-```bash
-docker compose exec postgres psql -U postgres -d surgecart \
-  -c "UPDATE users SET role='ADMIN' WHERE email='<your email>';"
-```
-
-Log out and back in afterwards — the role is carried in the JWT, so an
-existing token won't reflect the change.
-
-Seed data does include two products and one `LIVE` sale (100 units), so
-there's something to buy immediately after registering.
+**Anshivya Nagpal** · [GitHub @paradise2580](https://github.com/paradise2580)

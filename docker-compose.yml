@@ -26,7 +26,7 @@ services:
       retries: 10
 
   core-api:
-    build: ./core-api
+    build: ./backend/core-api
     ports: ["8080:8080"]
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/surgecart
@@ -49,7 +49,7 @@ services:
       start_period: 30s
 
   reserve-gateway:
-    build: ./reserve-gateway
+    build: ./backend/reserve-gateway
     ports: ["8081:8081"]
     environment:
       REDIS_URL: redis://redis:6379
@@ -58,7 +58,7 @@ services:
       redis: { condition: service_healthy }
 
   web:
-    build: ./web
+    build: ./frontend
     ports: ["4200:80"]
     depends_on: [core-api]
 

@@ -61,7 +61,7 @@ Write-Host ""
 Write-Host "  Register an account at http://localhost:4200/register" -ForegroundColor Cyan
 Write-Host "  Then, to unlock the Admin + benchmark panel:" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "    .\make-admin.ps1 your@email.com"
+Write-Host "    .\scripts\make-admin.ps1 your@email.com"
 Write-Host ""
 Write-Host "  Stop with:  docker compose down"
 Write-Host ""

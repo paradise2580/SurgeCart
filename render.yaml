@@ -19,8 +19,8 @@ services:
   - type: web
     name: surgecart-api
     runtime: docker
-    dockerfilePath: ./core-api/Dockerfile
-    dockerContext: ./core-api
+    dockerfilePath: ./backend/core-api/Dockerfile
+    dockerContext: ./backend/core-api
     plan: free
     healthCheckPath: /actuator/health
     envVars:
@@ -51,8 +51,8 @@ services:
   - type: web
     name: surgecart-gateway
     runtime: docker
-    dockerfilePath: ./reserve-gateway/Dockerfile
-    dockerContext: ./reserve-gateway
+    dockerfilePath: ./backend/reserve-gateway/Dockerfile
+    dockerContext: ./backend/reserve-gateway
     plan: free
     envVars:
       - key: REDIS_URL

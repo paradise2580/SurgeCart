@@ -39,7 +39,7 @@ cat <<'INFO'
 
   Register at http://localhost:4200/register, then to unlock the Admin panel:
 
-    ./make-admin.sh your@email.com
+    ./scripts/make-admin.sh your@email.com
 
   Stop with:  docker compose down
 

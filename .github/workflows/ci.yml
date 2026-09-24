@@ -21,18 +21,18 @@ jobs:
     # rather than burning the default six hours of runner time.
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: '21', cache: maven }
       - name: Build and test (Testcontainers spins up real Postgres + Redis)
-        working-directory: core-api
+        working-directory: backend/core-api
         run: mvn -B verify
       - name: Publish JaCoCo coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: jacoco-report
-          path: core-api/target/site/jacoco/
+          path: backend/core-api/target/site/jacoco/
           if-no-files-found: ignore
 
   reserve-gateway:
@@ -47,14 +47,14 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with: { go-version: '1.22', cache-dependency-path: reserve-gateway/go.sum }
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with: { go-version: '1.22', cache-dependency-path: backend/reserve-gateway/go.sum }
       - name: Vet
-        working-directory: reserve-gateway
+        working-directory: backend/reserve-gateway
         run: go vet ./...
       - name: Test (real Redis service container above)
-        working-directory: reserve-gateway
+        working-directory: backend/reserve-gateway
         env:
           REDIS_URL: redis://localhost:6379
         run: go test ./... -v
@@ -62,20 +62,20 @@ jobs:
   web:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '22', cache: 'npm', cache-dependency-path: web/package-lock.json }
-      - working-directory: web
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: '22', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
+      - working-directory: frontend
         run: npm ci
-      - working-directory: web
+      - working-directory: frontend
         run: npx ng lint || true   # non-blocking until the ruleset is tuned
       # Browser choice comes from karma.conf.js, which launches Chrome with
       # --no-sandbox. Passing --browsers here would override that and Chrome
       # cannot start without it inside a container.
       - name: Unit tests
-        working-directory: web
+        working-directory: frontend
         run: npx ng test --watch=false
-      - working-directory: web
+      - working-directory: frontend
         run: npx ng build --configuration production
 
   docker-build-and-scan:
@@ -83,11 +83,11 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build core-api image
-        run: docker build -t surgecart/core-api:${{ github.sha }} ./core-api
+        run: docker build -t surgecart/core-api:${{ github.sha }} ./backend/core-api
       - name: Build reserve-gateway image
-        run: docker build -t surgecart/reserve-gateway:${{ github.sha }} ./reserve-gateway
+        run: docker build -t surgecart/reserve-gateway:${{ github.sha }} ./backend/reserve-gateway
 
       # The scan reports, it does not gate. Base images routinely carry HIGH
       # CVEs with no fix published yet, so exit-code 1 here means the pipeline
@@ -116,7 +116,7 @@ jobs:
 
       - name: Upload scan results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: trivy-reports
           path: trivy-*.sarif
