@@ -8,38 +8,38 @@ import { AdminService, BenchmarkResult } from '../../core/services/admin.service
   standalone: true,
   imports: [CommonModule, FormsModule, ReactiveFormsModule],
   template: `
-    <div class="max-w-3xl mx-auto p-6 space-y-8">
-      <h1 class="text-2xl font-bold">Admin</h1>
+    <div class="container-x max-w-4xl space-y-8 py-16">
+      <div><p class="eyebrow">Control room</p><h1 class="mt-3 font-display text-4xl font-semibold">Admin</h1></div>
 
-      <section class="border rounded-lg p-4">
-        <h2 class="font-semibold mb-3">Activate a sale</h2>
+      <section class="card p-6">
+        <h2 class="font-semibold mb-4">Activate a sale</h2>
         <div class="flex gap-2">
           <input [(ngModel)]="activateSaleId" type="number" placeholder="Sale ID"
-                 class="border rounded px-3 py-2 w-32" />
-          <button (click)="activate()" class="bg-blue-600 text-white rounded px-4 py-2">Activate</button>
+                 class="field !w-32" />
+          <button (click)="activate()" class="btn-primary">Activate</button>
         </div>
         @if (activateResult()) {
-          <p class="text-sm text-green-700 mt-2">Activated — stock seeded into Redis: {{ activateResult() }}</p>
+          <p class="text-sm text-emerald-400 mt-2">Activated — stock seeded into Redis: {{ activateResult() }}</p>
         }
       </section>
 
-      <section class="border rounded-lg p-4">
+      <section class="card p-6">
         <h2 class="font-semibold mb-1">Concurrency benchmark</h2>
-        <p class="text-xs text-gray-500 mb-3">
+        <p class="text-xs text-mist mb-3">
           Fires N concurrent claims at the chosen strategy against a fresh stock count. This is the
           harness behind the benchmark table in docs/DESIGN.md.
         </p>
         <form [formGroup]="benchForm" (ngSubmit)="runBenchmark()" class="grid grid-cols-2 gap-3">
-          <input formControlName="saleId" type="number" placeholder="Sale ID" class="border rounded px-3 py-2" />
-          <select formControlName="strategy" class="border rounded px-3 py-2">
+          <input formControlName="saleId" type="number" placeholder="Sale ID" class="field" />
+          <select formControlName="strategy" class="field">
             <option value="naive">naive (broken baseline)</option>
             <option value="optimistic">jpa-optimistic-locking</option>
             <option value="pessimistic">jpa-pessimistic-locking</option>
             <option value="redis">redis-atomic-lua</option>
           </select>
-          <input formControlName="stock" type="number" placeholder="Stock seeded" class="border rounded px-3 py-2" />
-          <input formControlName="concurrentRequests" type="number" placeholder="Concurrent requests" class="border rounded px-3 py-2" />
-          <button type="submit" [disabled]="running()" class="col-span-2 bg-gray-800 text-white rounded py-2 disabled:opacity-50">
+          <input formControlName="stock" type="number" placeholder="Stock seeded" class="field" />
+          <input formControlName="concurrentRequests" type="number" placeholder="Concurrent requests" class="field" />
+          <button type="submit" [disabled]="running()" class="btn-primary col-span-2">
             {{ running() ? 'Running…' : 'Run benchmark' }}
           </button>
         </form>
@@ -47,17 +47,17 @@ import { AdminService, BenchmarkResult } from '../../core/services/admin.service
         @if (results().length > 0) {
           <table class="w-full text-xs mt-4 border-collapse">
             <thead>
-              <tr class="text-left border-b">
+              <tr class="text-left border-b border-white/10 text-mist">
                 <th class="py-1">Strategy</th><th>Granted</th><th>Rejected</th><th>Oversold</th><th>Duration (ms)</th><th>Throughput/s</th>
               </tr>
             </thead>
             <tbody>
               @for (r of results(); track $index) {
-                <tr class="border-b" [class.bg-red-50]="r.oversold">
+                <tr class="border-b border-white/10" [ngClass]="{ 'bg-blush/10': r.oversold }">
                   <td class="py-1">{{ r.strategy }}</td>
                   <td>{{ r.grantedCount }}</td>
                   <td>{{ r.rejectedCount }}</td>
-                  <td [class.text-red-600]="r.oversold" [class.font-bold]="r.oversold">{{ r.oversold ? 'YES' : 'no' }}</td>
+                  <td [class.text-blush-400]="r.oversold" [class.font-bold]="r.oversold">{{ r.oversold ? 'YES' : 'no' }}</td>
                   <td>{{ r.durationMillis }}</td>
                   <td>{{ r.throughputPerSecond }}</td>
                 </tr>

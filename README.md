@@ -7,6 +7,12 @@
 SurgeCart is a full-stack e-commerce system built for **flash sales**: limited stock, a huge crowd, and one second of chaos.
 The hard part isn't the shop. It's making sure the store never sells more items than it has when thousands of requests arrive at once.
 
+![SurgeCart home page](docs/screenshots/home.jpg)
+
+| Live drops with real-time stock | 90-second checkout hold | Bag checkout |
+|---|---|---|
+| ![Product grid](docs/screenshots/drops.jpg) | ![Checkout hold](docs/screenshots/checkout-hold.jpg) | ![Bag](docs/screenshots/bag.jpg) |
+
 ---
 
 ##  What it does
@@ -16,6 +22,8 @@ The hard part isn't the shop. It's making sure the store never sells more items 
 -  **No overselling.** Stock is claimed through an atomic Redis Lua script, so even 5,000 simultaneous buyers can't oversell.
 -  **No double charges.** Idempotency keys make retried or double-clicked requests harmless.
 -  **Accounts and roles.** JWT login, buyer and admin roles.
+-  **Shopping bag.** Save drops and check out in one go; each item still goes through the same atomic reserve-then-pay flow.
+-  **Customer reviews.** Logged-in shoppers post star ratings and reviews; only a masked name ("Priya S.") is ever shown.
 -  **Built-in benchmark.** An admin panel runs four locking strategies side by side and shows which ones oversell.
 
 **Measured result:** 5,000 buyers at once, 100 units in stock.
@@ -33,7 +41,7 @@ The hard part isn't the shop. It's making sure the store never sells more items 
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | Angular 18, TypeScript, Tailwind CSS |
+| **Frontend** | Angular 18, TypeScript, Tailwind CSS, three.js (animated hero), Angular Animations |
 | **Backend API** | Java 21, Spring Boot 3.3, Spring Security (JWT), Spring Data JPA |
 | **High-speed gateway** | Go 1.22 |
 | **Database** | PostgreSQL 16 (Flyway migrations) |

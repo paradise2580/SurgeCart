@@ -61,7 +61,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private record RuleMatch(String key, Supplier<BucketConfiguration> configSupplier) {}
 
     private RuleMatch resolveRule(String path, String clientIp) {
-        if (path.startsWith("/api/auth/")) {
+        // Only the endpoints that accept a password are credential-stuffing
+        // targets. /auth/refresh needs the httpOnly refresh cookie, and the
+        // frontend calls it on every page load to restore the session, so it
+        // falls through to the general limit instead.
+        if (path.equals("/api/auth/login") || path.equals("/api/auth/register")) {
             return new RuleMatch("rl:auth:" + clientIp,
                     () -> BucketConfiguration.builder()
                             .addLimit(Bandwidth.builder()

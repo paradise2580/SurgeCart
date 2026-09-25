@@ -110,6 +110,7 @@ public class SaleEventService {
 
         return new SaleEventDto(
                 sale.getId(), product.getId(), product.getTitle(), product.getImageUrl(),
+                product.getDescription(), product.getCategory(), product.getBasePrice(),
                 sale.getSalePrice(), sale.getTotalStock(), stockRemaining, sale.getPerUserLimit(),
                 sale.getStartsAt(), sale.getEndsAt(), sale.getStatus().name()
         );

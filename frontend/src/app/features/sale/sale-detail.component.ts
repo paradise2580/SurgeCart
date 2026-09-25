@@ -1,11 +1,13 @@
 import { Component, OnInit, OnDestroy, signal, computed, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { interval, Subscription } from 'rxjs';
 import { SaleService } from '../../core/services/sale.service';
 import { SaleSocketService } from '../../core/services/sale-socket.service';
 import { SaleEvent } from '../../core/models/sale.model';
 import { ApiError, ReserveResponse } from '../../core/models/reservation.model';
+import { CartService } from '../../core/services/cart.service';
+import { StockBarComponent } from '../../shared/stock-bar.component';
 
 type ViewState =
   | 'loading'
@@ -22,87 +24,137 @@ type ViewState =
 @Component({
   selector: 'app-sale-detail',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink, StockBarComponent],
   template: `
-    <div class="max-w-xl mx-auto p-6">
-      @if (state() === 'loading') {
-        <p class="text-gray-500">Loading…</p>
+    <section class="container-x py-10 md:py-16">
+      <a routerLink="/" fragment="drops" class="inline-flex items-center gap-2 text-sm text-mist transition hover:text-white">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+        All drops
+      </a>
+
+      @if (state() === 'loading' && !sale()) {
+        <div class="mt-8 grid gap-10 lg:grid-cols-2">
+          <div class="card aspect-square animate-pulse"></div>
+          <div class="space-y-4"><div class="h-10 w-2/3 animate-pulse rounded-xl bg-white/5"></div><div class="h-6 w-1/3 animate-pulse rounded-xl bg-white/5"></div></div>
+        </div>
       }
 
       @if (sale(); as s) {
-        <div class="border rounded-lg p-5">
-          @if (s.imageUrl) {
-            <img [src]="s.imageUrl" class="w-full h-56 object-cover rounded mb-4" [alt]="s.productTitle" />
-          }
-          <h1 class="text-xl font-bold">{{ s.productTitle }}</h1>
-          <p class="text-2xl text-blue-600 font-bold my-2">₹{{ s.salePrice }}</p>
-
-          <div class="flex items-center gap-2 mb-4">
-            <span class="inline-block w-2 h-2 rounded-full"
-                  [class.bg-green-500]="socket.connected()" [class.bg-gray-300]="!socket.connected()"></span>
-            <span class="text-xs text-gray-500">{{ socket.connected() ? 'Live' : 'Reconnecting…' }}</span>
+        <div class="mt-8 grid items-start gap-10 lg:grid-cols-2 lg:gap-16">
+          <div class="card product-stage relative grid aspect-square place-items-center overflow-hidden">
+            <div class="absolute inset-16 rounded-full bg-blush/20 blur-3xl"></div>
+            <span class="absolute left-5 top-5 rounded-full bg-blush px-3 py-1 text-xs font-bold">{{ discountPct() }}% OFF</span>
+            @if (s.imageUrl) {
+              <img [src]="s.imageUrl" [alt]="s.productTitle"
+                   class="relative h-[80%] w-[80%] animate-float object-contain drop-shadow-[0_40px_40px_rgba(0,0,0,0.7)]" />
+            }
           </div>
 
-          @switch (state()) {
-            @case ('not-started') {
-              <p class="text-gray-600">This sale hasn't started yet. Starts {{ s.startsAt | date:'medium' }}.</p>
-            }
+          <div class="lg:pt-6">
+            <div class="flex items-center gap-3">
+              <p class="eyebrow">{{ s.category }}</p>
+              <span class="flex items-center gap-1.5 text-xs text-mist">
+                <span class="h-1.5 w-1.5 rounded-full" [class.bg-emerald-400]="socket.connected()" [class.bg-mist]="!socket.connected()"></span>
+                {{ socket.connected() ? 'Live stock' : 'Reconnecting…' }}
+              </span>
+            </div>
+            <h1 class="mt-3 font-display text-4xl font-semibold leading-tight md:text-5xl">{{ s.productTitle }}</h1>
+            @if (s.description) { <p class="mt-4 max-w-lg text-mist-300">{{ s.description }}</p> }
 
-            @case ('live') {
-              <p class="mb-3 font-medium">{{ stockRemaining() }} left</p>
-              <button (click)="reserve()" [disabled]="reserving() || stockRemaining() === 0"
-                      class="w-full bg-blue-600 text-white rounded py-3 font-semibold disabled:opacity-50">
-                {{ reserving() ? 'Reserving…' : 'Buy now' }}
-              </button>
-            }
+            <div class="mt-6 flex flex-wrap items-baseline gap-3">
+              <span class="text-4xl font-bold">₹{{ s.salePrice | number:'1.0-0' }}</span>
+              <span class="text-lg text-mist line-through">₹{{ s.basePrice | number:'1.0-0' }}</span>
+              <span class="text-sm font-semibold text-emerald-400">Save ₹{{ s.basePrice - s.salePrice | number:'1.0-0' }}</span>
+            </div>
+            <p class="mt-1 text-xs text-mist">Inclusive of all taxes · Limit {{ s.perUserLimit }} per shopper</p>
 
-            @case ('sold-out') {
-              <p class="text-red-600 font-medium">Sold out.</p>
-            }
+            <div class="mt-8 max-w-md"><app-stock-bar [remaining]="stockRemaining()" [total]="s.totalStock" /></div>
 
-            @case ('held') {
-              <div class="bg-amber-50 border border-amber-200 rounded p-4">
-                <p class="font-semibold">Reserved — complete checkout within</p>
-                <p class="text-3xl font-bold text-amber-700">{{ formattedCountdown() }}</p>
-                <div class="flex gap-2 mt-3">
-                  <button (click)="checkout()" [disabled]="checkingOut()"
-                          class="flex-1 bg-green-600 text-white rounded py-2 font-semibold disabled:opacity-50">
-                    {{ checkingOut() ? 'Processing…' : 'Pay now' }}
-                  </button>
-                  <button (click)="cancelReservation()" class="px-4 border rounded">Cancel</button>
-                </div>
-              </div>
-            }
+            <div class="mt-8 max-w-md">
+              @switch (state()) {
+                @case ('not-started') {
+                  <p class="card p-5 text-mist-300">This drop opens {{ s.startsAt | date:'medium' }}.</p>
+                }
 
-            @case ('expired') {
-              <p class="text-red-600 font-medium mb-3">Your reservation expired.</p>
-              <button (click)="reset()" class="w-full bg-blue-600 text-white rounded py-2">Try again</button>
-            }
+                @case ('live') {
+                  <div class="flex gap-3">
+                    <button (click)="reserve()" [disabled]="reserving() || stockRemaining() === 0" class="btn-primary flex-1 !py-4 text-base">
+                      {{ reserving() ? 'Securing yours…' : 'Buy now' }}
+                    </button>
+                    <button type="button" (click)="toggleBag(s)" class="btn-ghost !py-4" [class.!border-blush]="inBag()">
+                      {{ inBag() ? '✓ In bag' : 'Add to bag' }}
+                    </button>
+                  </div>
+                  <p class="mt-3 text-xs text-mist">Buy now holds one for you for 90 seconds while you pay.</p>
+                }
 
-            @case ('payment-processing') {
-              <p class="text-gray-600">Processing your payment…</p>
-            }
+                @case ('sold-out') {
+                  <p class="card p-5 font-medium text-blush-400">Sold out. This drop is gone for good.</p>
+                }
 
-            @case ('payment-failed') {
-              <p class="text-red-600 font-medium mb-3">Payment failed. Your reservation is still held — you can retry.</p>
-              <button (click)="checkout()" class="w-full bg-blue-600 text-white rounded py-2">Retry payment</button>
-            }
+                @case ('held') {
+                  <div class="card border-gold/40 p-6">
+                    <p class="text-sm font-semibold text-gold">It's yours for the next</p>
+                    <p class="mt-1 font-display text-6xl font-semibold tabular-nums">{{ formattedCountdown() }}</p>
+                    <div class="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
+                      <div class="h-full bg-gold transition-[width] duration-500" [style.width.%]="secondsRemaining() / 0.9"></div>
+                    </div>
+                    <div class="mt-5 flex gap-3">
+                      <button (click)="checkout()" [disabled]="checkingOut()" class="btn-success flex-1 !py-3.5">
+                        {{ checkingOut() ? 'Processing…' : 'Pay ₹' + (s.salePrice | number:'1.0-0') }}
+                      </button>
+                      <button (click)="cancelReservation()" class="btn-ghost">Cancel</button>
+                    </div>
+                  </div>
+                }
 
-            @case ('confirmed') {
-              <div class="bg-green-50 border border-green-200 rounded p-4 text-center">
-                <p class="text-green-700 font-semibold text-lg">Order confirmed 🎉</p>
-                <p class="text-sm text-gray-600 mt-1">Payment ID: {{ paymentId() }}</p>
-              </div>
-            }
+                @case ('expired') {
+                  <div class="card p-5">
+                    <p class="font-medium text-blush-400">Your hold expired and the item went back on sale.</p>
+                    <button (click)="reset()" class="btn-primary mt-4 w-full">Try again</button>
+                  </div>
+                }
 
-            @case ('error') {
-              <p class="text-red-600 font-medium">{{ errorMessage() }}</p>
-              <button (click)="reset()" class="mt-3 w-full border rounded py-2">Back</button>
-            }
-          }
+                @case ('payment-processing') {
+                  <p class="card flex items-center gap-3 p-5 text-mist-300">
+                    <span class="h-5 w-5 animate-spin rounded-full border-2 border-blush border-t-transparent"></span> Processing your payment…
+                  </p>
+                }
+
+                @case ('payment-failed') {
+                  <div class="card p-5">
+                    <p class="font-medium text-blush-400">Payment failed. Your item is still held, so you can retry.</p>
+                    <button (click)="checkout()" class="btn-primary mt-4 w-full">Retry payment</button>
+                  </div>
+                }
+
+                @case ('confirmed') {
+                  <div class="card border-emerald-500/40 p-6 text-center">
+                    <p class="text-4xl">🎉</p>
+                    <p class="mt-2 text-lg font-semibold text-emerald-400">Order confirmed!</p>
+                    <p class="mt-1 text-xs text-mist">Payment ID: {{ paymentId() }}</p>
+                    <a routerLink="/orders" class="btn-ghost mt-5">View orders</a>
+                  </div>
+                }
+
+                @case ('error') {
+                  <div class="card p-5">
+                    <p class="font-medium text-blush-400">{{ errorMessage() }}</p>
+                    <button (click)="reset()" class="btn-ghost mt-4 w-full">Back</button>
+                  </div>
+                }
+              }
+            </div>
+
+            <ul class="mt-10 grid max-w-md grid-cols-3 gap-3 text-center text-[11px] text-mist-300">
+              <li class="glass rounded-2xl px-2 py-3"><span class="block text-lg">🔒</span>Never oversold</li>
+              <li class="glass rounded-2xl px-2 py-3"><span class="block text-lg">⏱️</span>90s checkout hold</li>
+              <li class="glass rounded-2xl px-2 py-3"><span class="block text-lg">💳</span>No double charges</li>
+            </ul>
+          </div>
         </div>
       }
-    </div>
+    </section>
   `,
 })
 export class SaleDetailComponent implements OnInit, OnDestroy {
@@ -128,6 +180,16 @@ export class SaleDetailComponent implements OnInit, OnDestroy {
     return Math.max(0, Math.round((expires - this.nowMs()) / 1000));
   });
 
+  discountPct = computed(() => {
+    const s = this.sale();
+    return s && s.basePrice > 0 ? Math.round((1 - s.salePrice / s.basePrice) * 100) : 0;
+  });
+
+  inBag = computed(() => {
+    const id = this.sale()?.id;
+    return id !== undefined && this.cart.items().some((i) => i.saleId === id);
+  });
+
   formattedCountdown = computed(() => {
     const s = this.secondsRemaining();
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -140,7 +202,8 @@ export class SaleDetailComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private router: Router,
     private saleService: SaleService,
-    public socket: SaleSocketService
+    public socket: SaleSocketService,
+    private cart: CartService
   ) {
     // The one clock-tick effect driving both the countdown display and the
     // "held -> expired" transition, anchored to the server-synced clock.
@@ -223,6 +286,11 @@ export class SaleDetailComponent implements OnInit, OnDestroy {
     const token = this.reservationToken();
     if (!token) return;
     this.saleService.release(token).subscribe({ next: () => this.reset(), error: () => this.reset() });
+  }
+
+  toggleBag(sale: SaleEvent): void {
+    if (this.inBag()) this.cart.remove(sale.id);
+    else this.cart.add(sale);
   }
 
   reset(): void {

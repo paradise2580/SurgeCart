@@ -28,6 +28,9 @@ public class Product {
     @Column(name = "image_url", length = 500)
     private String imageUrl;
 
+    @Column(length = 40)
+    private String category;
+
     @Column(name = "base_price", nullable = false, columnDefinition = "numeric(12,2)")
     private BigDecimal basePrice;
 

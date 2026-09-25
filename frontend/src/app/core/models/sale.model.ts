@@ -3,6 +3,9 @@ export interface SaleEvent {
   productId: number;
   productTitle: string;
   imageUrl: string | null;
+  description: string | null;
+  category: string | null;
+  basePrice: number;
   salePrice: number;
   totalStock: number;
   stockRemaining: number;

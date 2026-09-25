@@ -2,4 +2,68 @@
 @tailwind components;
 @tailwind utilities;
 
-body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+@layer base {
+  html { scroll-behavior: smooth; }
+  body {
+    @apply bg-ink text-white font-sans antialiased;
+    margin: 0;
+    background-image:
+      radial-gradient(60rem 40rem at 90% -10%, rgba(155, 92, 255, 0.12), transparent 60%),
+      radial-gradient(50rem 30rem at -10% 20%, rgba(255, 62, 138, 0.08), transparent 60%);
+    background-attachment: fixed;
+  }
+  ::selection { background: rgba(255, 62, 138, 0.35); }
+  input, textarea, select { color-scheme: dark; }
+}
+
+@layer components {
+  .container-x { @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8; }
+
+  .glass { @apply bg-white/[0.04] backdrop-blur-xl border border-white/10; }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(100deg, #ff6fa8 0%, #ff3e8a 35%, #9b5cff 70%, #f5c16c 100%);
+    background-size: 200% auto;
+    animation: shimmer 6s linear infinite;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold
+           transition duration-200 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.97];
+  }
+  .btn-primary {
+    @apply btn text-white shadow-glow hover:brightness-110;
+    background-image: linear-gradient(100deg, #ff3e8a, #c04bff);
+  }
+  .btn-ghost { @apply btn border border-white/15 text-white hover:border-white/40 hover:bg-white/5; }
+  .btn-success { @apply btn bg-emerald-500 text-ink hover:bg-emerald-400; }
+
+  .field {
+    @apply w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white
+           placeholder:text-mist/70 outline-none transition focus:border-blush/70 focus:bg-white/[0.06]
+           focus:ring-4 focus:ring-blush/15;
+  }
+
+  .card { @apply glass rounded-3xl shadow-card; }
+
+  .chip {
+    @apply rounded-full border border-white/10 px-4 py-2 text-xs font-medium text-mist-300 transition
+           hover:border-white/30 hover:text-white;
+  }
+  .chip-active { @apply border-blush/60 bg-blush/15 text-white; }
+
+  .eyebrow { @apply text-xs font-semibold uppercase tracking-[0.25em] text-blush-400; }
+
+  .reveal { opacity: 0; transform: translateY(28px); transition: opacity .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1); }
+  .reveal.is-visible { opacity: 1; transform: none; }
+
+  .product-stage {
+    background: radial-gradient(circle at 50% 60%, rgba(255, 62, 138, 0.22), rgba(155, 92, 255, 0.08) 45%, transparent 70%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  .reveal { opacity: 1; transform: none; }
+}
