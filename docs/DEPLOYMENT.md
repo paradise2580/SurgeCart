@@ -30,7 +30,7 @@ already has them).
 ## 2. Backend on Render
 
 1. Go to **render.com** → sign in with GitHub → **New** → **Blueprint**
-2. Select your `surgecart` repo. Render reads [`render.yaml`](./render.yaml)
+2. Select your `surgecart` repo. Render reads [`render.yaml`](../render.yaml)
    and provisions four things automatically:
    - `surgecart-db` (PostgreSQL)
    - `surgecart-redis` (Redis, `noeviction` — stock counters must never be dropped)

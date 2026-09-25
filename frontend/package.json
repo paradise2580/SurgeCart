@@ -7,7 +7,7 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "build:vercel": "node scripts-write-env.mjs && ng build --configuration production"
+    "build:vercel": "node scripts/write-env.mjs && ng build --configuration production"
   },
   "private": true,
   "dependencies": {

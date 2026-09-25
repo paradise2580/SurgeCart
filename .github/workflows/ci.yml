@@ -121,39 +121,3 @@ jobs:
           name: trivy-reports
           path: trivy-*.sarif
           if-no-files-found: ignore
-
-  deploy:
-    needs: [docker-build-and-scan]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      # Skip rather than fail when the deploy credentials are not configured
-      # — a fork, or a clone without secrets, should still get a green CI.
-      - name: Check for deploy credentials
-        id: creds
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
-        run: |
-          if [ -n "$RAILWAY_TOKEN" ] && [ -n "$RAILWAY_SERVICE_ID" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Railway secrets not set — skipping deploy."
-          fi
-
-      - name: Trigger Railway deploy
-        if: steps.creds.outputs.configured == 'true'
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
-        run: |
-          # --fail turns an HTTP error into a non-zero exit. Without it curl
-          # exits 0 on a 401 and a broken deploy reports as a green build.
-          curl --fail --silent --show-error \
-            -X POST "https://backboard.railway.app/graphql/v2" \
-            -H "Authorization: Bearer ${RAILWAY_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "{\"query\":\"mutation { serviceInstanceRedeploy(serviceId: \\\"${RAILWAY_SERVICE_ID}\\\") }\"}"
-      # Vercel redeploys the frontend automatically on push via its own
-      # GitHub integration — no step needed here.
