@@ -2,7 +2,7 @@
 
 > Sells **exactly 100** units when **5,000 people** click "Buy" in the same second. Never 101.
 
-[![CI](https://github.com/paradise2580/surgecart-flash-sale-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/paradise2580/surgecart-flash-sale-engine/actions/workflows/ci.yml)
+[![CI](https://github.com/paradise2580/SurgeCart/actions/workflows/ci.yml/badge.svg)](https://github.com/paradise2580/SurgeCart/actions/workflows/ci.yml)
 
 SurgeCart is a full-stack e-commerce system built for **flash sales**: limited stock, a huge crowd, and one second of chaos.
 The hard part isn't the shop. It's making sure the store never sells more items than it has when thousands of requests arrive at once.
@@ -47,7 +47,7 @@ The hard part isn't the shop. It's making sure the store never sells more items 
 ##  Project Structure
 
 ```
-surgecart-flash-sale-engine/
+SurgeCart/
 ├── frontend/                  # Angular web app (what users see)
 ├── backend/
 │   ├── core-api/              # Main Spring Boot API (Java)
@@ -72,8 +72,8 @@ You don't need to install Java, Node, Go, PostgreSQL or Redis; Docker handles al
 ### Step 1: Download the project
 
 ```bash
-git clone https://github.com/paradise2580/surgecart-flash-sale-engine.git
-cd surgecart-flash-sale-engine
+git clone https://github.com/paradise2580/SurgeCart.git
+cd SurgeCart
 ```
 
 ### Step 2: Start everything
