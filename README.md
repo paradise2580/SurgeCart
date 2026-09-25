@@ -180,7 +180,7 @@ Database tables and demo sale data are created automatically on first start.
 
 ---
 
-## 🛠️ Troubleshooting
+##  Troubleshooting
 
 | Problem | Fix |
 |---|---|
