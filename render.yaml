@@ -47,6 +47,13 @@ services:
         sync: false             # set this to your Vercel URL after the first deploy
       - key: SURGECART_RATE_LIMIT_AUTH_PER_15MIN
         value: "50"
+      # The free plan has 512 MB. At the Dockerfile's default 75% heap the JVM
+      # leaves too little room for metaspace and thread stacks and gets
+      # OOM-killed; a smaller heap and the serial collector fit comfortably.
+      - key: JAVA_OPTS
+        value: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=60 -XX:+UseSerialGC -Xss512k"
+      - key: DB_POOL_SIZE
+        value: "5"
 
   - type: web
     name: surgecart-gateway

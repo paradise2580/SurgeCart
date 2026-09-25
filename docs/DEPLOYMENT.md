@@ -66,7 +66,7 @@ appear on their own.
 5. **Deploy**. Copy the resulting URL, e.g. `https://surgecart.vercel.app`
 
 These variables are baked into `public/env-config.js` at build time by
-`scripts-write-env.mjs`, then read at runtime — so the API URL isn't
+`scripts/write-env.mjs`, then read at runtime — so the API URL isn't
 hardcoded into the JS bundle.
 
 ---
