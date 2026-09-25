@@ -13,6 +13,8 @@ The hard part isn't the shop. It's making sure the store never sells more items 
 |---|---|---|
 | ![Product grid](docs/screenshots/drops.jpg) | ![Checkout hold](docs/screenshots/checkout-hold.jpg) | ![Bag](docs/screenshots/bag.jpg) |
 
+![Sign-up page with live drop showcase](docs/screenshots/sign-up.jpg)
+
 ---
 
 ##  What it does

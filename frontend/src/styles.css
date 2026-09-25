@@ -63,6 +63,28 @@
   }
 }
 
+/* Animated gradient ring around the auth card. */
+@property --ring-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+@keyframes ring-spin { to { --ring-angle: 360deg; } }
+.glow-ring {
+  position: relative;
+  border-radius: 2rem;
+  padding: 1px;
+  background: conic-gradient(from var(--ring-angle), rgba(255,62,138,.9), rgba(155,92,255,.6), rgba(245,193,108,.8), rgba(255,255,255,.08) 70%, rgba(255,62,138,.9));
+  animation: ring-spin 6s linear infinite;
+  box-shadow: 0 30px 80px -30px rgba(255, 62, 138, 0.45);
+}
+.glow-ring > .glow-ring-inner { border-radius: calc(2rem - 1px); background: rgba(14, 14, 22, 0.92); backdrop-filter: blur(24px); }
+
+/* Light sweep across primary buttons on hover. */
+.btn-shine { position: relative; overflow: hidden; }
+.btn-shine::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-120%) skewX(-20deg);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent);
+  transition: transform .8s ease;
+}
+.btn-shine:hover::after { transform: translateX(120%) skewX(-20deg); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
   .reveal { opacity: 1; transform: none; }
