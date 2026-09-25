@@ -9,14 +9,14 @@ The hard part isn't the shop. It's making sure the store never sells more items 
 
 ---
 
-## ✨ What it does
+##  What it does
 
-- 🛒 **Live flash sales.** Users see stock count down in real time (WebSockets).
-- ⏱️ **Reserve, then pay.** Clicking "Buy now" holds an item for 90 seconds. If the user doesn't pay, it goes back on sale automatically.
-- 🔒 **No overselling.** Stock is claimed through an atomic Redis Lua script, so even 5,000 simultaneous buyers can't oversell.
-- 🔁 **No double charges.** Idempotency keys make retried or double-clicked requests harmless.
-- 👤 **Accounts and roles.** JWT login, buyer and admin roles.
-- 📊 **Built-in benchmark.** An admin panel runs four locking strategies side by side and shows which ones oversell.
+-  **Live flash sales.** Users see stock count down in real time (WebSockets).
+-  **Reserve, then pay.** Clicking "Buy now" holds an item for 90 seconds. If the user doesn't pay, it goes back on sale automatically.
+-  **No overselling.** Stock is claimed through an atomic Redis Lua script, so even 5,000 simultaneous buyers can't oversell.
+-  **No double charges.** Idempotency keys make retried or double-clicked requests harmless.
+-  **Accounts and roles.** JWT login, buyer and admin roles.
+-  **Built-in benchmark.** An admin panel runs four locking strategies side by side and shows which ones oversell.
 
 **Measured result:** 5,000 buyers at once, 100 units in stock.
 
@@ -29,7 +29,7 @@ The hard part isn't the shop. It's making sure the store never sells more items 
 
 ---
 
-## 🧰 Tech Stack
+##  Tech Stack
 
 | Layer | Technology |
 |---|---|
@@ -44,7 +44,7 @@ The hard part isn't the shop. It's making sure the store never sells more items 
 
 ---
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 surgecart-flash-sale-engine/
@@ -64,7 +64,7 @@ surgecart-flash-sale-engine/
 
 ---
 
-## 🚀 Run It Locally
+##  Run It Locally
 
 You only need **[Docker Desktop](https://www.docker.com/products/docker-desktop/)**.
 You don't need to install Java, Node, Go, PostgreSQL or Redis; Docker handles all of it.
@@ -91,15 +91,15 @@ chmod +x start.sh scripts/*.sh
 ./start.sh
 ```
 
-> ⏳ The first start takes about 3–5 minutes while Docker builds everything. Later starts take seconds.
+>  The first start takes about 3–5 minutes while Docker builds everything. Later starts take seconds.
 
 ### Step 3: Open the app
 
 | What | Link |
 |---|---|
-| 🌐 **Web app** | http://localhost:4200 |
-| 📖 API docs (Swagger) | http://localhost:8080/swagger-ui.html |
-| ⚡ Go gateway health | http://localhost:8081/health |
+|  **Web app** | http://localhost:4200 |
+|  API docs (Swagger) | http://localhost:8080/swagger-ui.html |
+|  Go gateway health | http://localhost:8081/health |
 
 ### Step 4: Try it out
 
@@ -127,7 +127,7 @@ docker compose down -v     # stop and delete all data
 
 ---
 
-## 🧪 Running the Tests
+##  Running the Tests
 
 <details>
 <summary>Click to expand</summary>
@@ -190,15 +190,8 @@ Database tables and demo sale data are created automatically on first start.
 | API won't start: `Migration checksum mismatch` | Your local database is from an older version. Reset it with the fresh-start command below. |
 | Something looks broken | Run `.\start.ps1 -Fresh` (Windows) or `./start.sh --fresh` (Mac/Linux) to reset everything. |
 
----
 
-## 📚 Learn More
-
-- **[Design document](docs/DESIGN.md)**: the architecture, why Redis + Lua beats database locking, and measured results.
-- **[Deployment guide](docs/DEPLOYMENT.md)**: deploy to Render (backend) and Vercel (frontend).
-
----
 
 ## 👤 Author
 
-**Anshivya Nagpal** · [GitHub @paradise2580](https://github.com/paradise2580)
+**Anshivya Nagpal** · [GitHub](https://github.com/paradise2580)
