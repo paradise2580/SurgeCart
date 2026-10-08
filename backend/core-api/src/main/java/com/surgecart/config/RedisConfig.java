@@ -51,6 +51,14 @@ public class RedisConfig {
         return script;
     }
 
+    @Bean
+    public DefaultRedisScript<Long> confirmScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setLocation(new ClassPathResource("lua/confirm.lua"));
+        script.setResultType(Long.class);
+        return script;
+    }
+
     /**
      * Backs the keyspace-notification fast path in ReservationExpiryService.
      * Requires `notify-keyspace-events Ex` on the Redis server — set in

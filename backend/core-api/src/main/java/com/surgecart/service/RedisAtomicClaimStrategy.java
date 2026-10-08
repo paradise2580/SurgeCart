@@ -32,15 +32,16 @@ public class RedisAtomicClaimStrategy implements ClaimStrategy {
     public ClaimOutcome claimOne(Long saleId) {
         String stockKey = "bench:sale:" + saleId + ":stock";
         String userKey = "bench:sale:" + saleId + ":user:" + UUID.randomUUID();
-        String tokenKey = "bench:resv:" + UUID.randomUUID();
+        String token = UUID.randomUUID().toString();
 
         List<Long> result = redisTemplate.execute(
                 reserveScript,
-                List.of(stockKey, userKey, tokenKey),
+                List.of(stockKey, userKey, "bench:resv:" + token, "bench:resv-timer:" + token),
                 "1",            // quantity
                 "999999",       // per-user limit — disabled for this benchmark
-                "5",            // TTL seconds for the throwaway reservation key
-                "{}"            // payload
+                "5",            // hold length in seconds for the throwaway reservation
+                "{}",           // payload
+                "5"             // record TTL — nothing releases benchmark holds, so expire it with the timer
         );
 
         long code = result.get(0);

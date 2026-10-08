@@ -6,6 +6,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -141,6 +142,39 @@ func TestRelease_DoubleReleaseIsANoOp(t *testing.T) {
 	}
 	if second {
 		t.Fatal("second release of the same token must be a no-op (existence guard), but it reported success")
+	}
+}
+
+func TestRelease_AfterHoldExpiresStillReturnsStock(t *testing.T) {
+	s := testStore(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	saleID := uuid.NewString()
+	seedStock(t, s, saleID, 5)
+
+	token := uuid.NewString()
+	if _, err := s.Reserve(ctx, saleID, "u1", 1, 10, 1, token, "{}"); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+
+	// Wait for the one-second hold to run out. The timer key must be gone but
+	// the record must survive it, or expiry would have nothing to release.
+	time.Sleep(1500 * time.Millisecond)
+	if n, _ := s.client.Exists(ctx, "resv-timer:"+token).Result(); n != 0 {
+		t.Fatal("hold timer should have expired")
+	}
+	if n, _ := s.client.Exists(ctx, "resv:"+token).Result(); n != 1 {
+		t.Fatal("reservation record must outlive its hold so the stock can be returned")
+	}
+
+	released, err := s.Release(ctx, saleID, "u1", token, 1)
+	if err != nil || !released {
+		t.Fatalf("release after expiry should succeed: released=%v err=%v", released, err)
+	}
+	stock, err := s.client.Get(ctx, "sale:"+saleID+":stock").Int()
+	if err != nil || stock != 5 {
+		t.Fatalf("expected stock back at 5 after releasing the expired hold, got %d (err=%v)", stock, err)
 	}
 }
 

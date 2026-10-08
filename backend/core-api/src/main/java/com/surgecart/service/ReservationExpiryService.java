@@ -11,7 +11,6 @@ import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.data.redis.listener.PatternTopic;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.PostConstruct;
 import java.time.Instant;
@@ -28,12 +27,16 @@ import java.util.List;
  *    is dropped, which Redis pub/sub does not guarantee against.
  *
  * 2. Backup / fast-path — a Redis keyspace-notification listener on expired
- *    resv:* keys. Fires the instant Redis expires the key rather than waiting
- *    for the next sweep tick, so a user who watches their countdown hit zero
- *    sees stock reclaimed within milliseconds, not up to 5 seconds later.
+ *    resv-timer:* keys. Fires the instant the hold's timer runs out rather
+ *    than waiting for the next sweep tick, so a user who watches their
+ *    countdown hit zero sees stock reclaimed within milliseconds, not up to
+ *    5 seconds later. It also reclaims holds made through the Go gateway,
+ *    which have no PostgreSQL row for the sweep to find.
  *
- * release.lua's existence guard on resv:{token} makes it harmless for both
- * layers to race to release the same reservation.
+ * Both layers release through release.lua, whose existence guard on the
+ * reservation record makes it harmless for them to race each other — and
+ * since checkout's confirm.lua deletes that record, neither can return a
+ * unit that has been paid for.
  */
 @Service
 @Slf4j
@@ -52,10 +55,12 @@ public class ReservationExpiryService {
     private MessageListener expiredKeyListener() {
         return (Message message, byte[] pattern) -> {
             String expiredKey = new String(message.getBody());
-            if (!expiredKey.startsWith("resv:")) return;
+            if (!expiredKey.startsWith(ReservationService.TIMER_PREFIX)) return;
 
-            String token = expiredKey.substring("resv:".length());
-            reservationRepository.findByToken(token).ifPresent(this::expireIfStillHeld);
+            String token = expiredKey.substring(ReservationService.TIMER_PREFIX.length());
+            reservationRepository.findByToken(token).ifPresentOrElse(
+                    this::expireIfStillHeld,
+                    () -> reservationService.releaseFromRecord(token));
         };
     }
 
@@ -67,17 +72,27 @@ public class ReservationExpiryService {
         expired.forEach(this::expireIfStillHeld);
 
         if (!expired.isEmpty()) {
-            log.info("Expiry sweep reclaimed {} abandoned reservation(s)", expired.size());
+            log.info("Expiry sweep checked {} lapsed reservation(s)", expired.size());
         }
     }
 
-    @Transactional
     public void expireIfStillHeld(Reservation reservation) {
         if (reservation.getStatus() != Enums.ReservationStatus.HELD) {
-            return; // already handled by the other layer — release.lua guard means this is still safe either way
+            return; // already handled by the other layer
         }
-        reservationService.releaseInRedis(reservation);
-        reservation.setStatus(Enums.ReservationStatus.EXPIRED);
-        reservationRepository.save(reservation);
+
+        boolean released = reservationService.releaseInRedis(reservation);
+
+        // Not released means the record is gone: the other layer released it,
+        // or a checkout has just confirmed it and is about to mark it CONFIRMED.
+        // Leave the row for them, unless it is so old that its record has
+        // expired in Redis and nothing is left to reclaim.
+        boolean recordLapsed = reservation.getExpiresAt()
+                .isBefore(Instant.now().minusSeconds(ReservationService.RECORD_GRACE_SECONDS));
+
+        if (released || recordLapsed) {
+            reservation.setStatus(Enums.ReservationStatus.EXPIRED);
+            reservationRepository.save(reservation);
+        }
     }
 }

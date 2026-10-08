@@ -1,6 +1,7 @@
 import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
 import { AdminService, BenchmarkResult } from '../../core/services/admin.service';
 
 @Component({
@@ -26,8 +27,8 @@ import { AdminService, BenchmarkResult } from '../../core/services/admin.service
       <section class="card p-6">
         <h2 class="font-semibold mb-1">Concurrency benchmark</h2>
         <p class="text-xs text-mist mb-3">
-          Fires N concurrent claims at the chosen strategy against a fresh stock count. This is the
-          harness behind the benchmark table in docs/DESIGN.md.
+          Fires N concurrent claims at the chosen strategy against a fresh stock count, or at all four
+          in turn so they line up side by side. This is the harness behind the benchmark table in docs/DESIGN.md.
         </p>
         <form [formGroup]="benchForm" (ngSubmit)="runBenchmark()" class="grid grid-cols-2 gap-3">
           <input formControlName="saleId" type="number" placeholder="Sale ID" class="field" />
@@ -39,8 +40,11 @@ import { AdminService, BenchmarkResult } from '../../core/services/admin.service
           </select>
           <input formControlName="stock" type="number" placeholder="Stock seeded" class="field" />
           <input formControlName="concurrentRequests" type="number" placeholder="Concurrent requests" class="field" />
-          <button type="submit" [disabled]="running()" class="btn-primary col-span-2">
+          <button type="submit" [disabled]="running()" class="btn-primary">
             {{ running() ? 'Running…' : 'Run benchmark' }}
+          </button>
+          <button type="button" (click)="runAll()" [disabled]="running()" class="btn-primary">
+            Run all four
           </button>
         </form>
 
@@ -90,6 +94,26 @@ export class AdminDashboardComponent {
     this.admin.activate(this.activateSaleId).subscribe((sale) => {
       this.activateResult.set(String(sale.stockRemaining));
     });
+  }
+
+  readonly strategies = ['naive', 'optimistic', 'pessimistic', 'redis'];
+
+  /** Same sale, stock and load for every strategy, one after another so they don't compete. */
+  async runAll(): Promise<void> {
+    if (this.benchForm.invalid) return;
+    this.running.set(true);
+    const { saleId, stock, concurrentRequests } = this.benchForm.value;
+    const batch: BenchmarkResult[] = [];
+    try {
+      for (const strategy of this.strategies) {
+        batch.push(await firstValueFrom(this.admin.runBenchmark(saleId!, strategy, stock!, concurrentRequests!)));
+      }
+    } catch {
+      // Keep whatever finished; the table shows which strategies ran.
+    } finally {
+      this.results.update((rs) => [...batch, ...rs]);
+      this.running.set(false);
+    }
   }
 
   runBenchmark(): void {

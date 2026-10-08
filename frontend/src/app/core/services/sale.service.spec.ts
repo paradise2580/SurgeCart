@@ -39,6 +39,15 @@ describe('SaleService', () => {
     req.flush({ reservationToken: 'rsv-1' });
   });
 
+  it('reuses the given idempotency key when retrying a reserve', () => {
+    service.reserve(7, 1, 'attempt-1').subscribe();
+    service.reserve(7, 1, 'attempt-1').subscribe();
+
+    const reqs = http.match(`${environment.apiBaseUrl}/sales/7/reserve`);
+    expect(reqs.map((r) => r.request.headers.get('Idempotency-Key'))).toEqual(['attempt-1', 'attempt-1']);
+    reqs.forEach((r) => r.flush({}));
+  });
+
   it('releases a reservation by token', () => {
     service.release('rsv-1').subscribe();
 
@@ -54,6 +63,8 @@ describe('SaleService', () => {
 
     const req = http.expectOne(`${environment.apiBaseUrl}/checkout`);
     expect(req.request.body).toEqual({ reservationToken: 'rsv-1' });
+    // Keyed on the hold, so paying twice for it is charged once.
+    expect(req.request.headers.get('Idempotency-Key')).toBe('checkout-rsv-1');
     req.flush({ orderId: 1 });
   });
 });

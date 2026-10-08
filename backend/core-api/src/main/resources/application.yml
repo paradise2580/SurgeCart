@@ -88,6 +88,10 @@ resilience4j:
         wait-duration-in-open-state: 10s
         permitted-number-of-calls-in-half-open-state: 5
         minimum-number-of-calls: 5
+        # An expired hold or another shopper's token is a client error, not
+        # a provider outage, and must not count towards opening the circuit.
+        ignore-exceptions:
+          - com.surgecart.exception.AppException
 
 logging:
   level:

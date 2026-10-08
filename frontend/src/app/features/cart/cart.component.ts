@@ -15,6 +15,7 @@ const FRIENDLY: Record<string, string> = {
   USER_LIMIT_EXCEEDED: "You've reached the limit for this drop.",
   SALE_NOT_LIVE: 'This drop has ended.',
   RATE_LIMITED: 'Too many attempts. Try again in a moment.',
+  RESERVATION_NOT_ACTIVE: 'The hold ran out before payment went through.',
 };
 
 /**
@@ -160,12 +161,14 @@ export class CartComponent implements OnInit {
   /**
    * The API allows three reserve calls per ten seconds per shopper, so a bag
    * of four or more items is paced rather than failed. A rate-limited call
-   * never claimed stock, so retrying it with a fresh idempotency key is safe.
+   * never claimed stock, and every attempt reuses one idempotency key, so a
+   * retry can never end up holding two units.
    */
   private async reserveWithBackoff(saleId: number, attempts = 4): Promise<ReserveResponse> {
+    const idempotencyKey = crypto.randomUUID();
     for (let i = 1; ; i++) {
       try {
-        return await firstValueFrom(this.saleService.reserve(saleId, 1));
+        return await firstValueFrom(this.saleService.reserve(saleId, 1, idempotencyKey));
       } catch (e) {
         if ((e as ApiError)?.code !== 'RATE_LIMITED' || i >= attempts) throw e;
         await new Promise((r) => setTimeout(r, 3500));

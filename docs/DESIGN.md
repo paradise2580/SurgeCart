@@ -44,8 +44,8 @@ Go Reservation Gateway   Spring Boot Core API
 
 **The central decision:** stock does not live in PostgreSQL during a sale.
 It lives in Redis, and every claim passes through a single atomic Lua
-script — check stock, enforce the per-user limit, decrement, write a
-TTL-bound reservation record — as one indivisible operation. PostgreSQL
+script — check stock, enforce the per-user limit, decrement, write the
+reservation record and its 90-second timer — as one indivisible operation. PostgreSQL
 becomes the durable record, written afterwards by an async worker. The
 database never sits on the hot path.
 
@@ -172,7 +172,9 @@ API is running.
 ## 5. Idempotency
 
 Every mutating request carries a client-generated `Idempotency-Key`
-header. `IdempotencyService` runs `SET idem:{key} PROCESSING NX EX 86400`:
+header, scoped server-side to the calling user. The Angular client keys a
+reserve per buying attempt (reused across its retries) and a checkout per
+hold (`checkout-{token}`), so repeats of one action always share a key. `IdempotencyService` runs `SET idem:{key} PROCESSING NX EX 86400`:
 the request that wins the `NX` race proceeds and overwrites the key with
 the real response; a request arriving while that's still in flight gets
 `409 DUPLICATE_IN_FLIGHT`; a request arriving after gets the cached
@@ -200,14 +202,24 @@ Unacknowledged messages from a crashed worker are reclaimable via
    size. Correct even if a Redis pub/sub message is dropped, which Redis
    pub/sub does not guarantee against.
 2. **Fast path:** a Redis keyspace-notification listener on expired
-   `resv:*` keys, firing within milliseconds instead of waiting up to 5s
-   for the next sweep tick.
+   `resv-timer:*` keys, firing within milliseconds instead of waiting up
+   to 5s for the next sweep tick. It also reclaims holds made through the
+   Go gateway, which have no PostgreSQL row, from the Redis record itself.
+
+A hold is two keys. `resv-timer:{token}` expires when the hold does;
+`resv:{token}`, the record, lives an hour longer. If the record itself
+expired at the deadline, Redis would delete it before either layer could
+act, and the existence guard below would refuse to return the stock.
 
 `release.lua`'s existence guard on `resv:{token}` makes it safe for both
 layers to race to release the same reservation — whichever gets there
-first does the work; the second is a no-op. Verified directly:
-`TestRelease_DoubleReleaseIsANoOp` (Go) and `ReservationSafetyTest`
-(Java).
+first does the work; the second is a no-op. Checkout claims the hold
+through `confirm.lua`, which succeeds only while the timer is running and
+deletes the record, so a paid hold can never be released and an expired
+one can never be paid for. Verified directly:
+`TestRelease_DoubleReleaseIsANoOp` and
+`TestRelease_AfterHoldExpiresStillReturnsStock` (Go),
+`ReservationSafetyTest` and `HoldLifecycleTest` (Java).
 
 ## 8. WebSocket at more than one instance
 
@@ -228,6 +240,8 @@ regardless of instance count.
 | Duplicate webhook delivery | HMAC-verified, then idempotent on `reservationToken` |
 | Double reserve click | Idempotency key — see section 5 |
 | Double release (sweep vs. keyspace listener) | `release.lua` existence guard — see section 7 |
+| Payment after the hold expires | `confirm.lua` refuses it; `409 RESERVATION_NOT_ACTIVE` — see section 7 |
+| Paying for another shopper's hold | Reported as not found; only the holder can pay or cancel |
 | One API instance goes down | WebSocket clients reconnect via SockJS; stock state is re-fetched, never assumed |
 
 ## 10. What would change at 10x scale

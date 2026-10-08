@@ -14,6 +14,11 @@ var reserveScriptSource string
 //go:embed lua_release.lua
 var releaseScriptSource string
 
+// recordGraceSeconds is how long a reservation record outlives its hold, so
+// the core-api's expiry listener can still read it and return the stock when
+// the hold's timer key expires. Matches ReservationService.RECORD_GRACE_SECONDS.
+const recordGraceSeconds = 3600
+
 // Store wraps the Redis client and the two cached Lua scripts. Both scripts
 // are byte-for-byte the same ones the Spring Boot core-api runs (see
 // ../../lua and core-api/src/main/resources/lua) — this gateway and the
@@ -57,10 +62,11 @@ func (s *Store) Reserve(ctx context.Context, saleID, userID string, qty, perUser
 	stockKey := "sale:" + saleID + ":stock"
 	userKey := "sale:" + saleID + ":user:" + userID
 	resvKey := "resv:" + token
+	timerKey := "resv-timer:" + token
 
 	raw, err := s.reserveScript.Run(ctx, s.client,
-		[]string{stockKey, userKey, resvKey},
-		qty, perUserLimit, ttlSeconds, payload,
+		[]string{stockKey, userKey, resvKey, timerKey},
+		qty, perUserLimit, ttlSeconds, payload, ttlSeconds+recordGraceSeconds,
 	).Result()
 	if err != nil {
 		return ReserveResult{}, err
@@ -81,9 +87,10 @@ func (s *Store) Release(ctx context.Context, saleID, userID, token string, qty i
 	stockKey := "sale:" + saleID + ":stock"
 	userKey := "sale:" + saleID + ":user:" + userID
 	resvKey := "resv:" + token
+	timerKey := "resv-timer:" + token
 
 	raw, err := s.releaseScript.Run(ctx, s.client,
-		[]string{stockKey, userKey, resvKey}, qty,
+		[]string{stockKey, userKey, resvKey, timerKey}, qty,
 	).Result()
 	if err != nil {
 		return false, err

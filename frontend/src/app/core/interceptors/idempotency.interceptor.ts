@@ -2,11 +2,11 @@ import { HttpInterceptorFn } from '@angular/common/http';
 
 /**
  * The client half of the exactly-once guarantee. Every mutating request
- * (POST/PUT/PATCH/DELETE) gets a fresh UUID as its Idempotency-Key —
- * generated once per logical user action, not per HTTP attempt, so a
- * double-click, a dropped-response retry, or Angular's own HttpClient retry
- * logic all reuse the SAME key. The server (IdempotencyService) then
- * guarantees the mutation itself only ever actually runs once.
+ * (POST/PUT/PATCH/DELETE) carries an Idempotency-Key. Calls where a repeat
+ * would do harm set their own key per logical action — SaleService keys a
+ * reserve per buying attempt and a checkout per hold — so a double-click or
+ * a retry reuses the SAME key and the server (IdempotencyService) runs the
+ * mutation only once. Anything else gets a fresh UUID here.
  */
 export const idempotencyInterceptor: HttpInterceptorFn = (req, next) => {
   const mutating = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);

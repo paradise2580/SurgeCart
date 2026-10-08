@@ -157,7 +157,7 @@ npm install
 npm test
 ```
 
-The key test is `ReservationConcurrencyTest`. It fires 5,000 concurrent purchases at 100 units of stock and checks that exactly 100 are sold.
+The key test is `ReservationConcurrencyTest`. It fires 5,000 concurrent buy attempts at 100 units of stock and checks that exactly 100 get through. `HoldLifecycleTest` covers the rest of the journey: an unpaid hold goes back on sale, an expired or someone else's hold can't be paid for, and a paid hold is never returned to stock.
 
 </details>
 

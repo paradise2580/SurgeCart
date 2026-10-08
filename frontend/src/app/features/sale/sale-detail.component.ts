@@ -275,8 +275,9 @@ export class SaleDetailComponent implements OnInit, OnDestroy {
         this.state.set('confirmed');
         this.checkingOut.set(false);
       },
-      error: () => {
-        this.state.set('payment-failed');
+      error: (err: ApiError) => {
+        // An expired hold can't be paid for; retrying would only fail again.
+        this.state.set(err?.code === 'RESERVATION_NOT_ACTIVE' ? 'expired' : 'payment-failed');
         this.checkingOut.set(false);
       },
     });

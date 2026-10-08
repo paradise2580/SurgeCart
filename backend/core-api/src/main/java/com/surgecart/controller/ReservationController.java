@@ -40,18 +40,19 @@ public class ReservationController {
             return reservationService.reserve(saleId, userId, request.quantity());
         }
 
-        return idempotencyService.execute(idempotencyKey, ReserveResponse.class,
+        // Scoped to the user so one shopper's key can never replay another's response.
+        return idempotencyService.execute("reserve:" + userId + ":" + idempotencyKey, ReserveResponse.class,
                 () -> reservationService.reserve(saleId, userId, request.quantity()));
     }
 
     @PostMapping("/reservations/{token}/release")
-    public void release(@PathVariable String token) {
-        reservationService.release(token);
+    public void release(@PathVariable String token, Authentication authentication) {
+        reservationService.release(token, currentUserId(authentication));
     }
 
     @GetMapping("/reservations/{token}")
-    public ReservationStatusDto status(@PathVariable String token) {
-        Reservation reservation = reservationService.getByToken(token);
+    public ReservationStatusDto status(@PathVariable String token, Authentication authentication) {
+        Reservation reservation = reservationService.getOwnedBy(token, currentUserId(authentication));
         long secondsRemaining = Math.max(0, Duration.between(Instant.now(), reservation.getExpiresAt()).getSeconds());
         return new ReservationStatusDto(
                 reservation.getToken(), reservation.getStatus().name(), reservation.getExpiresAt(), secondsRemaining);

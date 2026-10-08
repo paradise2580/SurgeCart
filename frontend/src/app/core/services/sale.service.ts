@@ -18,10 +18,13 @@ export class SaleService {
     return this.http.get<SaleEvent>(`${environment.apiBaseUrl}/sales/${id}`);
   }
 
-  // idempotencyKey is attached by IdempotencyInterceptor — callers just pass
-  // the same key again to safely retry the exact same logical attempt.
-  reserve(saleId: number, quantity: number): Observable<ReserveResponse> {
-    return this.http.post<ReserveResponse>(`${environment.apiBaseUrl}/sales/${saleId}/reserve`, { quantity });
+  /**
+   * One key per buying attempt. Pass the same key again to retry that attempt:
+   * the server replays its first answer instead of granting a second hold.
+   */
+  reserve(saleId: number, quantity: number, idempotencyKey: string = crypto.randomUUID()): Observable<ReserveResponse> {
+    return this.http.post<ReserveResponse>(`${environment.apiBaseUrl}/sales/${saleId}/reserve`, { quantity },
+      { headers: { 'Idempotency-Key': idempotencyKey } });
   }
 
   release(token: string): Observable<void> {
@@ -32,8 +35,10 @@ export class SaleService {
     return this.http.get<ReservationStatus>(`${environment.apiBaseUrl}/reservations/${token}`);
   }
 
+  /** Keyed on the hold, so a double-clicked or retried payment for it is charged once. */
   checkout(reservationToken: string): Observable<CheckoutResponse> {
-    return this.http.post<CheckoutResponse>(`${environment.apiBaseUrl}/checkout`, { reservationToken });
+    return this.http.post<CheckoutResponse>(`${environment.apiBaseUrl}/checkout`, { reservationToken },
+      { headers: { 'Idempotency-Key': `checkout-${reservationToken}` } });
   }
 
   myOrders(): Observable<OrderDto[]> {

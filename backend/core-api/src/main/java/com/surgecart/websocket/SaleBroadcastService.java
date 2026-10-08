@@ -2,6 +2,7 @@ package com.surgecart.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -19,6 +20,7 @@ import java.time.Instant;
  * out correctly regardless of how many instances are running.
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class SaleBroadcastService {
 
@@ -28,15 +30,20 @@ public class SaleBroadcastService {
     private final ObjectMapper objectMapper;
 
     public void broadcastStock(Long saleId, int stockRemaining) {
-        broadcast(saleId, stockRemaining, "LIVE");
+        broadcast(saleId, stockRemaining, stockRemaining > 0 ? "LIVE" : "SOLD_OUT");
     }
 
+    /**
+     * Best effort. It runs right after stock has moved in Redis, so throwing
+     * here would fail a reservation that has already been granted. Clients
+     * re-fetch state on reconnect, so a missed update corrects itself.
+     */
     public void broadcast(Long saleId, int stockRemaining, String status) {
         try {
             StockUpdateMessage message = new StockUpdateMessage(saleId, stockRemaining, status, Instant.now());
             redisTemplate.convertAndSend(CHANNEL, objectMapper.writeValueAsString(message));
         } catch (Exception e) {
-            throw new IllegalStateException("Failed to publish stock update", e);
+            log.warn("Failed to publish stock update for sale {}: {}", saleId, e.getMessage());
         }
     }
 }

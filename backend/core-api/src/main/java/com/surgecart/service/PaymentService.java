@@ -1,5 +1,6 @@
 package com.surgecart.service;
 
+import com.surgecart.domain.Enums;
 import com.surgecart.domain.Reservation;
 import com.surgecart.domain.SaleEvent;
 import com.surgecart.dto.CheckoutResponse;
@@ -41,10 +42,22 @@ public class PaymentService {
     // Idempotency guard for webhook replays, keyed by reservation token.
     private final ConcurrentMap<String, Boolean> processedWebhooks = new ConcurrentHashMap<>();
 
+    /**
+     * Pays for a hold. confirm() claims it first, which fails unless the
+     * caller owns it and it is still running, and afterwards stops the expiry
+     * sweep from returning the unit to stock. Paying again for a hold that is
+     * already paid returns success without charging or ordering twice.
+     */
     @CircuitBreaker(name = "paymentProvider", fallbackMethod = "checkoutFallback")
-    public CheckoutResponse checkout(String reservationToken) {
-        Reservation reservation = reservationService.getByToken(reservationToken);
-        SaleEvent sale = saleEventRepository.findById(reservation.getSaleEventId()).orElseThrow();
+    public CheckoutResponse checkout(String reservationToken, Long userId) {
+        Reservation owned = reservationService.getOwnedBy(reservationToken, userId);
+        if (owned.getStatus() == Enums.ReservationStatus.CONFIRMED) {
+            return new CheckoutResponse("CONFIRMED", null, null);
+        }
+
+        // Look the sale up before claiming the hold, so a failure here can't strand the unit.
+        SaleEvent sale = saleEventRepository.findById(owned.getSaleEventId()).orElseThrow();
+        Reservation reservation = reservationService.confirm(reservationToken, userId);
 
         String razorpayOrderId = "order_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         String paymentId = "pay_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
@@ -53,17 +66,27 @@ public class PaymentService {
         // simulate immediate success and drive the same webhook path a real
         // Razorpay webhook would drive, so the async pipeline is exercised
         // identically either way.
-        onPaymentConfirmed(reservationToken, reservation.getSaleEventId(), reservation.getUserId(),
-                sale.getSalePrice(), paymentId);
+        try {
+            onPaymentConfirmed(reservationToken, reservation.getSaleEventId(), reservation.getUserId(),
+                    sale.getSalePrice(), paymentId);
+        } catch (RuntimeException e) {
+            // The unit was claimed for this order; hand it back rather than lose it.
+            processedWebhooks.remove(reservationToken);
+            reservationService.revertConfirm(reservation);
+            throw e;
+        }
 
         return new CheckoutResponse("CONFIRMED", paymentId, razorpayOrderId);
     }
 
     @SuppressWarnings("unused")
-    private CheckoutResponse checkoutFallback(String reservationToken, Throwable t) {
+    private CheckoutResponse checkoutFallback(String reservationToken, Long userId, Throwable t) {
+        // Business rejections (expired hold, someone else's token) are not
+        // provider failures and must reach the client unchanged.
+        if (t instanceof AppException appException) throw appException;
         log.error("Payment provider circuit open for reservation {}: {}", reservationToken, t.getMessage());
         throw new AppException("PAYMENT_UNAVAILABLE", HttpStatus.SERVICE_UNAVAILABLE,
-                "Payment provider is temporarily unavailable. Your reservation is still held — please retry shortly.");
+                "Payment provider is temporarily unavailable and you have not been charged. Please try again shortly.");
     }
 
     /** Called either directly (simulated flow above) or from WebhookController
