@@ -52,6 +52,11 @@ appear on their own.
 
 ## 3. Frontend on Vercel
 
+> The live demo serves the frontend from Render (`surgecart-web.onrender.com`),
+> so automatic Vercel deploys are switched off with `"git": {"deploymentEnabled": false}`
+> in `vercel.json` and `frontend/vercel.json`. Remove that entry from both files
+> to deploy on Vercel instead, and point `CORS_ORIGIN` at the Vercel URL.
+
 1. **vercel.com** → **Add New** → **Project** → import the same repo
 2. Set **Root Directory** to `frontend` (important — it's a monorepo)
 3. Framework preset: **Angular**. Leave build settings alone; `frontend/vercel.json`

@@ -3,6 +3,7 @@ package com.surgecart.config;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.BucketConfiguration;
+import io.github.bucket4j.ConsumptionProbe;
 import io.github.bucket4j.distributed.proxy.ProxyManager;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -14,11 +15,17 @@ import org.springframework.core.annotation.Order;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.CorsProcessor;
+import org.springframework.web.cors.CorsUtils;
+import org.springframework.web.cors.DefaultCorsProcessor;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 @Component
@@ -27,6 +34,8 @@ import java.util.function.Supplier;
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private final ProxyManager<byte[]> proxyManager;
+    private final CorsConfigurationSource corsConfigurationSource;
+    private final CorsProcessor corsProcessor = new DefaultCorsProcessor();
 
     /**
      * Auth attempts allowed per 15 min per IP. Deliberately configurable:
@@ -42,19 +51,38 @@ public class RateLimitFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
 
+        // A CORS preflight is the browser asking permission, not an attempt.
+        // Counting it would charge every cross-origin login twice.
+        if (CorsUtils.isPreFlightRequest(request)) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         String path = request.getRequestURI();
         String clientIp = clientIp(request);
 
         RuleMatch rule = resolveRule(path, clientIp);
         Bucket bucket = proxyManager.builder().build(rule.key().getBytes(StandardCharsets.UTF_8), rule.configSupplier());
 
-        if (bucket.tryConsume(1)) {
+        ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
+        if (probe.isConsumed()) {
             chain.doFilter(request, response);
         } else {
+            // This filter runs ahead of Spring Security's CORS handling, so the
+            // rejection must carry the CORS headers itself. Without them the
+            // browser hides the 429 and the app can only report "could not
+            // reach the server".
+            CorsConfiguration cors = corsConfigurationSource.getCorsConfiguration(request);
+            if (cors != null) {
+                corsProcessor.processRequest(cors, request, response);
+            }
+            long retryAfterSeconds = Math.max(1, TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill()));
             response.setStatus(429);
+            response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
             response.setContentType("application/json");
             response.getWriter().write(
-                    "{\"status\":429,\"code\":\"RATE_LIMITED\",\"message\":\"Too many requests. Please slow down.\"}");
+                    "{\"status\":429,\"code\":\"RATE_LIMITED\",\"message\":\"Too many attempts. Please wait "
+                            + retryAfterSeconds + " seconds and try again.\"}");
         }
     }
 
